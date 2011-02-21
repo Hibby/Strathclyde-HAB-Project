@@ -1,1 +1,6 @@
-Just a quick and dirty project to get some students in the air
+Just a quick and dirty project to get some students in the air.
+
+RTTY code is taken from Pegasus Project, http://pegasushabproject.org.uk/wiki/doku.php/ideas:notes?s=rtty, which in turn was taken from The Icarus Project.
+The Icarus Project - (c) Robert Harrison - rharrison@hgf.com December 2008, until I get my own sorted.
+
+
