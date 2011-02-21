@@ -1,3 +1,5 @@
+/*
+	General GPS/NMEA example
  */ 
  #include <string.h>
  #include <ctype.h>
