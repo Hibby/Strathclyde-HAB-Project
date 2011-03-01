@@ -31,12 +31,13 @@ void setup() {
 	sendUBX(setNav, sizeof(setNav)/sizeof(uint8_t));
 	getUBX_ACK(setNav);
  
-  Serial1.println("$PUBX,40,GLL,0,0,0,0*5C");
-  Serial1.println("$PUBX,40,GGA,0,0,0,0*5A");
-  Serial1.println("$PUBX,40,GSA,0,0,0,0*4E");
-  Serial1.println("$PUBX,40,RMC,0,0,0,0*47");
-  Serial1.println("$PUBX,40,GSV,0,0,0,0*59");
-  Serial1.println("$PUBX,40,VTG,0,0,0,0*5E");
+  //turn off all NMEA strings and request a UBLOX 00 string.
+Serial1.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");
+Serial1.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");
+Serial1.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");
+Serial1.print("$PUBX,40,GSV,0,0,0,0*59\r\n");
+Serial1.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");
+Serial1.print("$PUBX,40,RMC,0,0,0,0*47\r\n");
   Serial1.println("$PUBX,00*33"); 
  }
  
@@ -47,34 +48,31 @@ void loop() {
   if (Serial1.available()) {
 
       //read serial data to buffer
-      //Serial.print(Serial1.read());
-      buffer[bufinc]=Serial1.read();
-      //Serial.print(buffer[bufinc]);
-      //print to debug
-      //Serial.print(buffer[bufinc], BYTE);
-     //Serial.print(",");
+       buffer[bufinc]=Serial1.read();
+      
+      //Uncomment below to see full string - prints to debug
+      Serial.print(buffer[bufinc], BYTE);
+     
       bufinc++;
-      //Serial.print(bufinc);Serial.print(",");
+      //when buffer is full, start parsing things
       if (bufinc==117) {
     cont=0;
     ver=0;
        for (int i=0;i<115;i++) {
          if (buffer[i] == pubxVerify[i]) {
-         /* Serial.print(buffer[i]);
-          Serial.print(",");
-          Serial.print(pubxVerify[i-1]);
-           */
            ver++;
          }
        
            if (ver==4) {
              
            for (int i=0;i<115;i++){
-           if (buffer[i]==','){    // check for the position of the  "," separator
+           if (buffer[i]==','){
+             // check for the position of the  "," separator
              indices[cont]=i;
              cont++;
            }
            }
+           //Purely for debug, spew out useful/interesting data
            Serial.println("");
            Serial.println("");
            Serial.println("---------------");
@@ -126,7 +124,8 @@ void loop() {
   else {
   //request serial data from gps
   Serial1.println("$PUBX,00*33"); 
-  delay(10000);
+  //set time before next poll
+  delay(2000);
   }
 }
   
