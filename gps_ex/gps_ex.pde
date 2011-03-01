@@ -32,12 +32,12 @@ void setup() {
 	getUBX_ACK(setNav);
  
   //turn off all NMEA strings and request a UBLOX 00 string.
-Serial1.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");
-Serial1.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");
-Serial1.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");
-Serial1.print("$PUBX,40,GSV,0,0,0,0*59\r\n");
-Serial1.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");
-Serial1.print("$PUBX,40,RMC,0,0,0,0*47\r\n");
+Serial1.println("$PUBX,40,GLL,0,0,0,0*5C");
+Serial1.println("$PUBX,40,GGA,0,0,0,0*5A");
+Serial1.println("$PUBX,40,GSA,0,0,0,0*4E");
+Serial1.println("$PUBX,40,RMC,0,0,0,0*47");
+Serial1.println("$PUBX,40,GSV,0,0,0,0*59");
+Serial1.println("$PUBX,40,VTG,0,0,0,0*5E");
   Serial1.println("$PUBX,00*33"); 
  }
  
