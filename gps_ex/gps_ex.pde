@@ -1,7 +1,9 @@
-// This code gives an example of configuring an FSA03 connected to a software serial port on an Arduino
- 
+/*
+GPS Connection, read, parse and export for UBLOX 5 enabled GPS Modules
+*/
 char buffer[120]="";
 char pubxVerify[6]="$PUBX";
+char pubxString[21];
 int indices[25];
 int cont = 0;
 int bufinc=0;
@@ -46,10 +48,10 @@ void loop() {
   //buffer increment
   //check there is serial data available
   if (Serial1.available()) {
-
      getPUBX(); 
-  //no serial data found: 
-  } else {
+   
+  } //no serial data found: 
+  else {
   //request serial data from gps
   Serial1.println("$PUBX,00*33"); 
   //set time before next poll
@@ -124,6 +126,12 @@ boolean getUBX_ACK(uint8_t *MSG) {
 		}
 	}
 }
+
+/* This Function reads the data that's coming in the serial port from the GPS, 
+verifies that it's accurate (by looking for $PUBX at the start, no checksumming yet),
+sticks it in a few arrays, displays the values for debug and then puts them in a final
+global array for RTTY transmission. Clear the buffer, wait to be called again */
+
 void getPUBX() {
   //read serial data to buffer
        buffer[bufinc]=Serial1.read();
@@ -181,6 +189,7 @@ void getPUBX() {
              
            for (int j=indices[i];j<(indices[i+1]-1);j++){
              Serial.print(buffer[j+1]); 
+             pubxString[i] = buffer [j+1];
            }
            Serial.println("");
            }
@@ -188,8 +197,7 @@ void getPUBX() {
           }
          }
          
-           
-           for (int i=0;i<117;i++){
+          for (int i=0;i<117;i++){
            buffer[i]=' ';
            }
            bufinc=0;
