@@ -47,81 +47,9 @@ void loop() {
   //check there is serial data available
   if (Serial1.available()) {
 
-      //read serial data to buffer
-       buffer[bufinc]=Serial1.read();
-      
-      //Uncomment below to see full string - prints to debug
-      Serial.print(buffer[bufinc], BYTE);
-     
-      bufinc++;
-      //when buffer is full, start parsing things
-      if (bufinc==117) {
-    cont=0;
-    ver=0;
-       for (int i=0;i<115;i++) {
-         if (buffer[i] == pubxVerify[i]) {
-           ver++;
-         }
-       
-           if (ver==4) {
-             
-           for (int i=0;i<115;i++){
-           if (buffer[i]==','){
-             // check for the position of the  "," separator
-             indices[cont]=i;
-             cont++;
-           }
-           }
-           //Purely for debug, spew out useful/interesting data
-           Serial.println("");
-           Serial.println("");
-           Serial.println("---------------");
-           for (int i=0;i<=20;i++) {
-             switch(i){
-             case 0 :Serial.print("Message Identifier: ");break;
-             case 1 :Serial.print("Time in UTC (HhMmSs): ");break;
-             case 2 :Serial.print("Latitude: ");break;
-             case 3 :Serial.print("N/S Indicator: ");break;
-             case 4 :Serial.print("Longitude: ");break;
-             case 5 :Serial.print("E/W Indicator: ");break;
-             case 6 :Serial.print("AltRef: ");break;
-             case 7 :Serial.print("NavStat: ");break;
-             case 8 :Serial.print("Hacc: ");break;
-             case 9 :Serial.print("Vacc: ");break;
-             case 10 :Serial.print("SOG ");break;
-             case 11 :Serial.print("COG: ");break;
-             case 12 :Serial.print("Vvel: ");break;
-             case 13 :Serial.print("ageC: ");break;
-             case 14 :Serial.print("HDOP: ");break;
-             case 15 :Serial.print("VDOP: ");break;
-             case 16 :Serial.print("TDop: ");break;
-             case 17 :Serial.print("NoSats: ");break;
-             case 18 :Serial.print("GLONASSats");break;
-             case 19 :Serial.print("DR Used: ");break;
-             case 20 :Serial.print("Checksum: ");break;             
-           }
-             
-           for (int j=indices[i];j<(indices[i+1]-1);j++){
-             Serial.print(buffer[j+1]); 
-           }
-           Serial.println("");
-           }
-           Serial.println("---------------");
-          }
-         }
-         
-           
-           for (int i=0;i<117;i++){
-           buffer[i]=' ';
-           }
-           bufinc=0;
-         }
-  
-
-}
- 
+     getPUBX(); 
   //no serial data found: 
-  else {
+  } else {
   //request serial data from gps
   Serial1.println("$PUBX,00*33"); 
   //set time before next poll
@@ -196,4 +124,76 @@ boolean getUBX_ACK(uint8_t *MSG) {
 		}
 	}
 }
+void getPUBX() {
+  //read serial data to buffer
+       buffer[bufinc]=Serial1.read();
+      
+      //Uncomment below to see full string - prints to debug
+      Serial.print(buffer[bufinc], BYTE);
+     
+      bufinc++;
+      //when buffer is full, start parsing things
+      if (bufinc==117) {
+    cont=0;
+    ver=0;
+       for (int i=0;i<115;i++) {
+         if (buffer[i] == pubxVerify[i]) {
+           ver++;
+         }
+       
+           if (ver==4) {
+             
+           for (int i=0;i<115;i++){
+           if (buffer[i]==','){
+             // check for the position of the  "," separator
+             indices[cont]=i;
+             cont++;
+           }
+           }
+           //Purely for debug, spew out useful/interesting data
+           Serial.println("");
+           Serial.println("");
+           Serial.println("---------------");
+           for (int i=0;i<=20;i++) {
+             switch(i){
+             case 0 :Serial.print("Message Identifier: ");break;
+             case 1 :Serial.print("Time in UTC (HhMmSs): ");break;
+             case 2 :Serial.print("Latitude: ");break;
+             case 3 :Serial.print("N/S Indicator: ");break;
+             case 4 :Serial.print("Longitude: ");break;
+             case 5 :Serial.print("E/W Indicator: ");break;
+             case 6 :Serial.print("AltRef: ");break;
+             case 7 :Serial.print("NavStat: ");break;
+             case 8 :Serial.print("Hacc: ");break;
+             case 9 :Serial.print("Vacc: ");break;
+             case 10 :Serial.print("SOG ");break;
+             case 11 :Serial.print("COG: ");break;
+             case 12 :Serial.print("Vvel: ");break;
+             case 13 :Serial.print("ageC: ");break;
+             case 14 :Serial.print("HDOP: ");break;
+             case 15 :Serial.print("VDOP: ");break;
+             case 16 :Serial.print("TDop: ");break;
+             case 17 :Serial.print("NoSats: ");break;
+             case 18 :Serial.print("GLONASSats");break;
+             case 19 :Serial.print("DR Used: ");break;
+             case 20 :Serial.print("Checksum: ");break;             
+           }
+             
+           for (int j=indices[i];j<(indices[i+1]-1);j++){
+             Serial.print(buffer[j+1]); 
+           }
+           Serial.println("");
+           }
+           Serial.println("---------------");
+          }
+         }
+         
+           
+           for (int i=0;i<117;i++){
+           buffer[i]=' ';
+           }
+           bufinc=0;
+         }
+  
 
+}
