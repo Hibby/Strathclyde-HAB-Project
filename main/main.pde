@@ -6,8 +6,11 @@ works, then it'll be the centre of the program :)
 
 //Include GPS parser and set up an instance
 
-#include <string.h>
+#include <stdio.h>
 #include <TinyGPS.h>
+#include <stdint.h>
+#include <util/crc16.h>
+#include <string.h>
 TinyGPS gps;
 
 /*
@@ -21,11 +24,181 @@ GPS Connection, read, parse and export for UBLOX 5 enabled GPS Modules
 //int cont = 0;
 //int bufinc=0;
 //int ver=0;
+int counter=0;
 char s[100];
-
+unsigned long fix_age, time, date, speed, course, pos;
+unsigned long chars;
+unsigned short sentences, failed_checksum;
+long lat, lon, alt, flat, flon;
 #define ASCII_BIT 8
 #define BAUD_RATE 10000
 
+// Send a byte array of UBX protocol to the GPS
+void sendUBX(uint8_t *MSG, uint8_t len) {
+	for(int i=0; i<len; i++) {
+		Serial1.print(MSG[i], BYTE);
+		Serial.print(MSG[i], HEX);
+	}
+	Serial.println();
+}
+
+ 
+// Calculate expected UBX ACK packet and parse UBX response from GPS
+boolean getUBX_ACK(uint8_t *MSG) {
+	uint8_t b;
+	uint8_t ackByteID = 0;
+	uint8_t ackPacket[10];
+	unsigned long startTime = millis();
+	Serial.print(" * Reading ACK response: ");
+ 
+	// Construct the expected ACK packet    
+	ackPacket[0] = 0xB5;	// header
+	ackPacket[1] = 0x62;	// header
+	ackPacket[2] = 0x05;	// class
+	ackPacket[3] = 0x01;	// id
+	ackPacket[4] = 0x02;	// length
+	ackPacket[5] = 0x00;
+	ackPacket[6] = MSG[2];	// ACK class
+	ackPacket[7] = MSG[3];	// ACK id
+	ackPacket[8] = 0;		// CK_A
+	ackPacket[9] = 0;		// CK_B
+ 
+	// Calculate the checksums
+	for (uint8_t i=2; i<8; i++) {
+		ackPacket[8] = ackPacket[8] + ackPacket[i];
+		ackPacket[9] = ackPacket[9] + ackPacket[8];
+	}
+ 
+	while (1) {
+ 
+		// Test for success
+		if (ackByteID > 9) {
+				// All packets in order!
+				Serial.println(" (SUCCESS!)");
+				return true;
+		}
+ 
+		// Timeout if no valid response in 3 seconds
+		if (millis() - startTime > 3000) { 
+			Serial.println(" (FAILED!)");
+			return false;
+		}
+ 
+		// Make sure data is available to read
+		if (Serial1.available()) {
+			b = Serial1.read();
+ 
+			// Check that bytes arrive in sequence as per expected ACK packet
+			if (b == ackPacket[ackByteID]) { 
+				ackByteID++;
+				Serial.print(b, HEX);
+			} else {
+				ackByteID = 0;	// Reset and look again, invalid order
+			}
+ 
+		}
+	}
+}
+
+//Next up rtty
+
+void rtty_txstring (char * string)
+{
+	/* Simple function to sent a char at a time to 
+	** rtty_txbyte function. 
+	** NB Each char is one byte (8 Bits)
+	*/
+	char c;
+	c = *string++;
+	while ( c != '\0')
+	{
+		rtty_txbyte (c);
+		c = *string++;
+	}
+}
+
+void rtty_txbyte (char c)
+{
+	/* Simple function to sent each bit of a char to 
+	** rtty_txbit function. 
+	** NB The bits are sent Least Significant Bit first
+	**
+	** All chars should be preceded with a 0 and 
+	** proceded with a 1. 0 = Start bit; 1 = Stop bit
+	**
+	** ASCII_BIT = 7 or 8 for ASCII-7 / ASCII-8
+	*/
+	int i;
+	rtty_txbit (0); // Start bit
+	// Send bits for for char LSB first	
+	for (i=0;i<8;i++)
+	{
+		if (c & 1) rtty_txbit(1); 
+			else rtty_txbit(0);	
+		c = c >> 1;
+	}
+	rtty_txbit (1); // Stop bit
+        rtty_txbit (1); // Stop bit
+}
+
+void rtty_txbit (int bit)
+{
+		if (bit)
+		{
+		  // high
+                    digitalWrite(9, HIGH);  
+                    digitalWrite(11, LOW);
+		}
+		else
+		{
+		  // low
+                    digitalWrite(11, HIGH);
+                    digitalWrite(9, LOW);
+		}
+		//delayMicroseconds(20500); // 10000 = 100 BAUD 20150
+                delayMicroseconds(BAUD_RATE); // 10000 = 100 BAUD 20150
+}
+
+//checksum send options
+
+void make_string()
+{
+	char checksum[10];
+       counter++;
+	snprintf(s,sizeof(s),"$$SHAB1,%i,%lu,%ld,%ld,%ld", counter, time, flat, flon, alt);
+ 
+	snprintf(checksum, sizeof(checksum), "*%04X\n", gps_CRC16_checksum(s));
+	// or 	snprintf(checksum, sizeof(checksum), "*%02X\n", gps_xor_checksum(s));
+ 
+	// It would be much more efficient to use the return value of snprintf here, rather than strlen
+ 
+	if (strlen(s) > sizeof(s) - 4 - 1)
+	{
+		// Don't overflow the buffer. You should have made it bigger.
+		return;
+	}
+ 
+	// Also copy checksum's terminating \0 (hence the +1).
+	memcpy(s + strlen(s), checksum, strlen(checksum) + 1);
+}
+
+uint16_t gps_CRC16_checksum (char *string)
+{
+	size_t i;
+	uint16_t crc;
+	uint8_t c;
+ 
+	crc = 0xFFFF;
+ 
+	// Calculate checksum ignoring the first two $s
+	for (i = 2; i < strlen(string); i++)
+	{
+		c = string[i];
+		crc = _crc_xmodem_update (crc, c);
+	}
+ 
+	return crc;
+}
 
 //Finally, the program can get going
 
@@ -71,15 +244,14 @@ Serial1.println("$PUBX,00*33");
  
 // Dump bytes to debug as they appear
 void loop() {
-  //buffer increment
+  //counter increment
+  
   //check there is serial data available
   if (Serial1.available()) {
   int c=Serial1.read();
   if(gps.encode(c)){
-  long lat, lon;
-unsigned long fix_age, time, date, speed, course, pos;
-unsigned long chars;
-unsigned short sentences, failed_checksum;
+
+
 
 // retrieves +/- lat/long in 100000ths of a degree
 gps.get_position(&lat, &lon, &fix_age);
@@ -91,15 +263,16 @@ gps.get_datetime(&date, &time, &fix_age);
 speed = gps.speed();
 
 pos = gps.sats();
- Serial.print(pos);
  
 // course in 100ths of a degree
 course = gps.course();
+flat = lat;
+flon = lon;
+alt = gps.altitude()/100;
 
-Serial.println(date);
-Serial.println(time);
-
-
+make_string();
+rtty_txstring(s);
+Serial.println(s);
   }
    
   } //no serial data found: 
@@ -110,82 +283,3 @@ Serial.println(time);
   delay(2000);
   }
 }
-
-
-/* This Function reads the data that's coming in the serial port from the GPS, 
-verifies that it's accurate (by looking for $PUBX at the start, no checksumming yet),
-sticks it in a few arrays, displays the values for debug and then puts them in a final
-global array for RTTY transmission. Clear the buffer, wait to be called again 
-
-void getPUBX() {
-  //read serial data to buffer
-       buffer[bufinc]=Serial1.read();
-      
-      //Uncomment below to see full string - prints to debug
-      Serial.print(buffer[bufinc], BYTE);
-     
-      bufinc++;
-      //when buffer is full, start parsing things
-      if (bufinc==117) {
-    cont=0;
-    ver=0;
-       for (int i=0;i<115;i++) {
-         if (buffer[i] == pubxVerify[i]) {
-           ver++;
-         }
-       
-           if (ver==4) {
-             
-           for (int i=0;i<115;i++){
-           if (buffer[i]==','){
-             // check for the position of the  "," separator
-             indices[cont]=i;
-             cont++;
-           }
-           }
-           //Purely for debug, spew out useful/interesting data
-           Serial.println("");
-           Serial.println("");
-           Serial.println("---------------");
-           for (int i=0;i<=20;i++) {
-             switch(i){
-             case 0 :Serial.print("Message Identifier: ");break;
-             case 1 :Serial.print("Time in UTC (HhMmSs): ");break;
-             case 2 :Serial.print("Latitude: ");break;
-             case 3 :Serial.print("N/S Indicator: ");break;
-             case 4 :Serial.print("Longitude: ");break;
-             case 5 :Serial.print("E/W Indicator: ");break;
-             case 6 :Serial.print("AltRef: ");break;
-             case 7 :Serial.print("NavStat: ");break;
-             case 8 :Serial.print("Hacc: ");break;
-             case 9 :Serial.print("Vacc: ");break;
-             case 10 :Serial.print("SOG ");break;
-             case 11 :Serial.print("COG: ");break;
-             case 12 :Serial.print("Vvel: ");break;
-             case 13 :Serial.print("ageC: ");break;
-             case 14 :Serial.print("HDOP: ");break;
-             case 15 :Serial.print("VDOP: ");break;
-             case 16 :Serial.print("TDop: ");break;
-             case 17 :Serial.print("NoSats: ");break;
-             case 18 :Serial.print("GLONASSats");break;
-             case 19 :Serial.print("DR Used: ");break;
-             case 20 :Serial.print("Checksum: ");break;             
-           }
-             
-           for (int j=indices[i];j<(indices[i+1]-1);j++){
-             Serial.print(buffer[j+1]); 
-             pubxString[i] = buffer [j+1];
-           }
-           Serial.println("");
-           }
-           Serial.println("---------------");
-          }
-         }
-         
-          for (int i=0;i<117;i++){
-           buffer[i]=' ';
-           }
-           bufinc=0;
-         }
-}
-*/
