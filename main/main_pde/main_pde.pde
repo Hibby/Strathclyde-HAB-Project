@@ -18,8 +18,8 @@ char timestr[9];
 char latstr[20];
 char lonstr[20];
 //initialise cutoff values for easy changing :)
-int payload_cutoff = 30000;
-int balloon_cutorr = 31000;
+int payload_cutoff = 29000;
+int balloon_cutoff = 29500;
 unsigned long fix_age, time, date, speed, course, pos;
 unsigned long chars;
 unsigned short sentences, failed_checksum;
@@ -217,8 +217,12 @@ void setup() {
   pinMode(11, OUTPUT); //Radio Tx1
   pinMode(7, OUTPUT); //Radio En
   digitalWrite(7,HIGH);
+  pinMode(38,OUTPUT);
+  pinMode(42,OUTPUT);
   pinMode(46,OUTPUT);
   pinMode(50,OUTPUT);
+  digitalWrite(38,HIGH);
+  digitalWrite(42,LOW);
   digitalWrite(46,HIGH);
   digitalWrite(50,LOW);
 
@@ -288,6 +292,7 @@ void loop() {
       floatToString(latstr,flat,7);
       floatToString(lonstr,flon,7);
       alt = gps.altitude()/100;
+      
       if (alt > payload_cutoff) {
         //cutoff
         digitalWrite(50,HIGH);
@@ -299,8 +304,8 @@ void loop() {
       }
             if (alt > balloon_cutoff) {
         //cutoff
-        digitalWrite(38,HIGH);
-        digitalWrite(42,LOW);
+        digitalWrite(42,HIGH);
+        digitalWrite(38,LOW);
       } else {
         //reset condition, no cutoff
         digitalWrite(38,HIGH);
@@ -311,8 +316,10 @@ void loop() {
       Serial.println(s);
       timeSort();
       make_string();
-      
+      digitalWrite(7,HIGH);
+      delay(6000);
       rtty_txstring(s);
+      digitalWrite(7,LOW);
       delay(60000);
     }
 
@@ -323,11 +330,7 @@ void loop() {
   digitalWrite(50,LOW);
     //request serial data from gps
     Serial1.println("$PUBX,00*33"); 
-    digitalWrite(7,HIGH);
-    delay(5000);
-    rtty_txstring("$$STRATHAB1,time, lat, lon, data*checksum\n");
-    digitalWrite(7,LOW);
     //set time before next poll
-    delay(60000);
+    delay(2000);
   }
 }

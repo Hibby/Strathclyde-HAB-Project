@@ -1,38 +1,39 @@
-#include <OneWire.h>
 #include <stdlib.h>
+#include <OneWire.h>
 #include <stdio.h>
 #include <TinyGPS.h>
 #include <stdint.h>
 #include <util/crc16.h>
 #include <string.h>
 #include <floattostring.h>
-#define N_MORSE  (sizeof(morsetab)/sizeof(morsetab[0]))
+#include <DallasTemperature.h>
 
-#define SPEED  (50)
-#define DOTLEN  (1200/SPEED)
-#define DASHLEN  (3*(1200/SPEED))
-
-int LEDpin = 12 ;
-
-OneWire ds(8);
 TinyGPS gps;
+OneWire ds(5);
+DallasTemperature sensors(&ds);
 
 /*
 GPS Connection, read, parse and export for UBLOX 5 enabled GPS Modules
  */
+
+
+
+DeviceAddress outside ={0x28, 0x36, 0x52, 0xEE, 0x02, 0x00, 0x00, 0x44};
+DeviceAddress inside = {0x28, 0xC1, 0xB1, 0xE4, 0x02, 0x00, 0x00, 0x3C};
 
 int counter=0;
 char s[100];
 char timestr[9];
 char latstr[20];
 char lonstr[20];
-char tempstr[10];
+char intempstr[10];
+char outtempstr[10];
 unsigned long fix_age, time, date, speed, course, pos;
 unsigned long chars;
 unsigned short sentences, failed_checksum;
 long lat, lon, alt;
-float flat, flon, temp;
-#define ASCII_BIT 8
+float flat, flon, temp, intemp,outtemp;
+#define ASCII_BIT 7
 #define BAUD_RATE 10000
 
 
@@ -106,109 +107,62 @@ boolean getUBX_ACK(uint8_t *MSG) {
 
 //Next up rtty
 
-// Start of Morse Code Generator //
-struct t_mtab { char a, pat; } ;
-
-struct t_mtab morsetab[] = {
-  	{'.', 106},
-	{',', 115},
-	{'?', 76},
-	{'/', 41},
-	{'A', 6},
-	{'B', 17},
-	{'C', 21},
-	{'D', 9},
-	{'E', 2},
-	{'F', 20},
-	{'G', 11},
-	{'H', 16},
-	{'I', 4},
-	{'J', 30},
-	{'K', 13},
-	{'L', 18},
-	{'M', 7},
-	{'N', 5},
-	{'O', 15},
-	{'P', 22},
-	{'Q', 27},
-	{'R', 10},
-	{'S', 8},
-	{'T', 3},
-	{'U', 12},
-	{'V', 24},
-	{'W', 14},
-	{'X', 25},
-	{'Y', 29},
-	{'Z', 19},
-	{'1', 62},
-	{'2', 60},
-	{'3', 56},
-	{'4', 48},
-	{'5', 32},
-	{'6', 33},
-	{'7', 35},
-	{'8', 39},
-	{'9', 47},
-	{'0', 63}
-} ;
-
-
-void
-dash()
+void rtty_txstring (char * string)
 {
-  digitalWrite(LEDpin, LOW) ;
-  delay(DASHLEN);
-  digitalWrite(LEDpin, HIGH) ;
-  delay(DOTLEN) ;
-}
-
-void
-dit()
-{
-  digitalWrite(LEDpin, LOW) ;
-  delay(DOTLEN);
-  digitalWrite(LEDpin, HIGH) ;
-  delay(DOTLEN);
-}
-
-void
-send(char a)
-{
-  int i ;
-  if (a == ' ') {
-    Serial.print(a) ;
-    delay(7*DOTLEN) ;
-    return ;
+  /* Simple function to sent a char at a time to 
+   	** rtty_txbyte function. 
+   	** NB Each char is one byte (8 Bits)
+   	*/
+  char c;
+  c = *string++;
+  while ( c != '\0')
+  {
+    rtty_txbyte (c);
+    c = *string++;
   }
-  for (i=0; i<N_MORSE; i++) {
-    if (morsetab[i].a == a) {
-      unsigned char p = morsetab[i].pat ;
-     Serial.print(morsetab[i].a) ; //- Killed echo back to serial
-
-      while (p != 1) {
-          if (p & 1)
-            dash() ;
-          else
-            dit() ;
-          p = p / 2 ;
-      }
-      delay(2*DOTLEN) ;
-      return ;
-    }
-  }
-  /* if we drop off the end, then we send a space */
-  //Serial.print("?") ;
 }
 
-void
-sendmsg(char *str)
+void rtty_txbyte (char c)
 {
-  while (*str)
-    send(*str++) ;
-  //Serial.println(""); //-- Killed LF back to serial
+  /* Simple function to sent each bit of a char to 
+   	** rtty_txbit function. 
+   	** NB The bits are sent Least Significant Bit first
+   	**
+   	** All chars should be preceded with a 0 and 
+   	** proceded with a 1. 0 = Start bit; 1 = Stop bit
+   	**
+   	** ASCII_BIT = 7 or 8 for ASCII-7 / ASCII-8
+   	*/
+  int i;
+  rtty_txbit (0); // Start bit
+  // Send bits for for char LSB first	
+  for (i=0;i<7;i++)
+  {
+    if (c & 1) rtty_txbit(1); 
+    else rtty_txbit(0);	
+    c = c >> 1;
+  }
+  rtty_txbit (1); // Stop bit
+  rtty_txbit (1); // Stop bit
 }
 
-
+void rtty_txbit (int bit)
+{
+  if (bit)
+  {
+    // high
+    digitalWrite(9, HIGH);  
+    digitalWrite(11, LOW);
+  }
+  else
+  {
+    // low
+    digitalWrite(11, HIGH);
+    digitalWrite(9, LOW);
+  }
+  //delayMicroseconds(20500); // 10000 = 100 BAUD 20150
+  delayMicroseconds(BAUD_RATE); // 10000 = 100 BAUD 20150
+}
 
 //checksum send options
 
@@ -216,7 +170,7 @@ void make_string()
 {
   char checksum[10];
   counter++;
-  snprintf(s,sizeof(s),"??EASYJET1,%i,%s,%s,%s,%ld", counter, timestr, latstr, lonstr, alt);
+  snprintf(s,sizeof(s),"$$FUSEN,%i,%s,%s,%s,%ld,%s;%s", counter, timestr, latstr, lonstr, alt, intempstr, outtempstr);
 
   snprintf(checksum, sizeof(checksum), "*%04X\n", gps_CRC16_checksum(s));
   // or 	snprintf(checksum, sizeof(checksum), "*%02X\n", gps_xor_checksum(s));
@@ -262,27 +216,38 @@ void timeSort() {
 }
 
 
+float printTemperature(DeviceAddress deviceAddress)
+{
+float tempC = sensors.getTempC(deviceAddress);
+
+return tempC;
+}
+
 void setup() {
   // put your setup code here, to run once:
   //Set up the Radio to do what we want
-  //pinMode(9, OUTPUT); //Radio Tx0
-  //pinMode(11, OUTPUT); //Radio Tx1
-  //pinMode(7, OUTPUT); //Radio En
-    pinMode(LEDpin, OUTPUT) ;
- // digitalWrite(7,HIGH);
+  pinMode(9, OUTPUT); //Radio Tx0
+  pinMode(11, OUTPUT); //Radio Tx1
+  pinMode(7, OUTPUT); //Radio En
+  digitalWrite(7,HIGH);
   pinMode(46,OUTPUT);
   pinMode(50,OUTPUT);
   digitalWrite(46,HIGH);
   digitalWrite(50,LOW);
+  
+  sensors.begin();
+  
+  sensors.setResolution(inside,10);
+  sensors.setResolution(outside,10);
 
   //Set up the GPS for doing what we want
   // Start up serial ports
   Serial1.begin(38400);
   Serial.begin(115200); // used for debug ouput
 
-  delay(2000); // Give the GPS time to boot
-
-  // Lower the baud rate to 9600 from 38.4k
+ delay(2000); // Give the GPS time to boot
+ 
+   // Lower the baud rate to 9600 from 38.4k
   Serial.print("Setting uBlox port mode: ");
   uint8_t setPort[] = {
     0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xD0, 0x08, 0x00, 0x00, 0x80, 0x25, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x9E, 0x95  };
@@ -308,48 +273,22 @@ void setup() {
   Serial1.println("$PUBX,40,GSV,0,0,0,0*59");
   Serial1.println("$PUBX,40,VTG,0,0,0,0*5E");
   Serial1.println("$PUBX,00*33"); 
+
+
 }
+
+
 
 void loop() {
   // put your main code here, to run repeatedly: 
   //counter increment
-  byte i;
-  byte present = 0;
-  byte data[12];
-  byte addr[8];
-  
-  if ( !ds.search(addr)) {
-    ds.reset_search();
-    delay(250);
-    return;
-  } 
-  
-  ds.reset();
-  ds.select(addr);
-  ds.write(0x44,1);         // start conversion, with parasite power on at the end
-  
-  delay(1000);     // maybe 750ms is enough, maybe not
-  // we might do a ds.depower() here, but the reset will take care of it.
-  
-  present = ds.reset();
-  ds.select(addr);    
-  ds.write(0xBE);         // Read Scratchpad
 
-
-  for ( i = 0; i < 9; i++) {           // we need 9 bytes
-    data[i] = ds.read();
-
-  }
-      
-  temp = ( (data[1] << 8) + data[0] )*0.0625;
-  Serial.print(temp);
-  
-        floatToString(tempstr,temp,2);
-      Serial.print(tempstr);
-  //check there is serial data available
+       //check there is serial data available
   if (Serial1.available()) {
     int c=Serial1.read();
     if(gps.encode(c)){
+
+
 
       // retrieves +/- lat/long in 100000ths of a degree
       gps.get_position(&lat, &lon, &fix_age);
@@ -357,51 +296,50 @@ void loop() {
       // time in hhmmsscc, date in ddmmyy
       gps.get_datetime(&date, &time, &fix_age);
 
-      // returns speed in 100ths of a knot
-      speed = gps.speed();
+      sensors.requestTemperatures();
+  
+       intemp = printTemperature(inside);
+       outtemp = printTemperature(outside);
 
-      pos = gps.sats();
-
-      // course in 100ths of a degree
-      course = gps.course();
+  
+   floatToString(intempstr,intemp,2);
+   floatToString(outtempstr,outtemp,2);
+        
+      
+      
       flat = lat;
       flon = lon;
       flat = flat/100000;
       flon = flon/100000;
       floatToString(latstr,flat,7);
       floatToString(lonstr,flon,7);
-
       alt = gps.altitude()/100;
-      if (alt > 24000) {
-        //cutoff
-        digitalWrite(50,HIGH);
-        digitalWrite(46,LOW);
-      } else {
-        //reset condition, no cutoff
-        digitalWrite(46,HIGH);
-        digitalWrite(50,LOW);
-      }
+ 
       
      //final functions to make everything come together
       Serial.println(s);
       timeSort();
       make_string();
       
-      sendmsg(s);
-      delay(60000);
+      rtty_txstring(s);
+      delay(5000);
     }
 
   } //no serial data found: 
   else {
   //reset condition, no cutoff
-  digitalWrite(46,HIGH);
-  digitalWrite(50,LOW);
     //request serial data from gps
     Serial1.println("$PUBX,00*33"); 
-    sendmsg("TEMPERATURE: ");
-    sendmsg(tempstr);
-    Serial.println(tempstr);
-    //set time before next poll
+    
     delay(2000);
+    
+    /*rtty_txstring("$$FUSEN,time, lat, lon, alt, ");
+    rtty_txstring(intempstr);
+    rtty_txstring(";");
+    rtty_txstring(outtempstr);
+    rtty_txstring(" *checksum\n");
+    */
+    //set time before next poll
+    
   }
 }
